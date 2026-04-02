@@ -5,16 +5,26 @@ An inline TUI flash card for [Jujutsu](https://github.com/jj-vcs/jj) version con
 Unlike full-screen TUIs, `supjj` renders a compact panel directly in your terminal without clearing the screen — like a dropdown cheat sheet. It shows your repo state, lets you compose a `jj` command with autocomplete, then executes it and gets out of the way.
 
 ```
-┌─────────── Log ────────────┬──── Status ─────┐
-│ ◆  abc123 main  Fix typo   │ Working copy    │
-│ ○  def456 Add feature      │ M src/main.rs   │
-│ ○  ghi789 Initial commit   │ A src/new.rs    │
-└────────────────────────────┴─────────────────┘
+┌─────────── Log ──────────────┬──── Status ─────┐
+│ ○  abc123 Add feature        │ Working copy    │
+│▌◆  def456 Fix typo           │ M src/main.rs   │
+│ ○  ghi789 Initial commit     │ A src/new.rs    │
+└──────────────────────────────┴─────────────────┘
   bookmark
   commit
   describe
-> jj b█ookmark
+> jj show def456█
 ```
+
+## Features
+
+- **Inline rendering** — occupies ~22 lines at your cursor, no alternate screen takeover
+- **Two-column layout** — log graph (60%) and status (40%) side by side
+- **ANSI color passthrough** — log and status render with the same colors as your terminal
+- **Deep autocomplete** — full `jj` command tree: subcommands, sub-subcommands, and flags
+- **Dynamic completions** — bookmark names fetched live from the repo
+- **Revision highlighting** — as you type `-r`, `--from`, `--to`, etc., the referenced revision is highlighted in the log panel with a yellow `▌` marker
+- **Debounced resolution** — revset expressions are resolved after 250ms of inactivity, keeping the UI responsive
 
 ## Install
 
@@ -41,7 +51,7 @@ supjj
 ```
 
 The flash card appears inline showing:
-- **Log panel** — recent commit graph with colors
+- **Log panel** — recent commit graph with full colors and branch structure
 - **Status panel** — working copy changes
 - **Command input** — type your `jj` command with autocomplete
 
@@ -66,15 +76,30 @@ The flash card appears inline showing:
 - **Flags** — `--limit`, `--revision`, `--no-graph`, etc. (context-aware per command)
 - **Dynamic values** — bookmark names are fetched live from the repo
 
+### Revision Highlighting
+
+When your command references a revision, the log panel highlights it in real time:
+
+```
+> jj rebase -r abc --onto main
+```
+
+Both `abc` and `main` will be highlighted in the log with a yellow `▌` marker and dark background. This works with:
+- Flags: `-r`, `--revision`, `--from`, `--to`, `--onto`, `--into`, `--source`
+- Positional args: `show <rev>`, `edit <rev>`, `abandon <rev>`, etc.
+- Revset expressions: `@-`, `heads(mutable())`, `abc | def`
+
+Resolution is debounced at 250ms so the UI stays snappy while you type.
+
 ## Architecture
 
 ```
 src/
 ├── main.rs      # Entry point, clap CLI, repo check, command execution
-├── jj.rs        # Shell out to jj for log, status, bookmark list
+├── jj.rs        # Shell out to jj for log, status, bookmark list, revset resolution
 ├── ansi.rs      # ANSI SGR escape code → Ratatui Style/Span parser
-├── commands.rs  # Static command tree (all jj subcommands + flags)
-└── tui.rs       # Ratatui inline viewport, rendering, input handling
+├── commands.rs  # Static command tree + revset extraction from input
+└── tui.rs       # Ratatui inline viewport, rendering, input, highlighting
 ```
 
 ### Key design decisions
@@ -82,6 +107,7 @@ src/
 - **Viewport::Inline** — Ratatui renders ~22 lines at the cursor position without entering alternate screen. Your terminal history stays intact.
 - **Static command tree** — The full `jj` CLI hierarchy is embedded at compile time for instant autocomplete with zero startup cost.
 - **Execute and dismiss** — After Enter, the TUI tears down and `jj` runs with inherited stdio, so output appears naturally in your terminal.
+- **Debounced revset resolution** — Revision expressions are extracted from the input, debounced at 250ms, then resolved via `jj log -r <revset>` to get change IDs for highlighting.
 
 ## License
 
