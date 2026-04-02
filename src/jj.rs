@@ -26,6 +26,27 @@ pub fn status() -> String {
         .unwrap_or_default()
 }
 
+/// Resolve a revset expression to a list of short change IDs.
+/// Returns empty vec on invalid revset or error.
+pub fn resolve_revset(revset: &str) -> Vec<String> {
+    Command::new("jj")
+        .args([
+            "log", "-r", revset,
+            "--no-graph", "--color=never",
+            "--template", r#"change_id.shortest(8) ++ "\n""#,
+        ])
+        .stderr(std::process::Stdio::null())
+        .output()
+        .map(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 pub fn bookmark_names() -> Vec<String> {
     Command::new("jj")
         .args(["bookmark", "list", "--color=never"])

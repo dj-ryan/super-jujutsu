@@ -220,6 +220,49 @@ pub fn expects_bookmark_arg(tokens: &[&str]) -> bool {
     )
 }
 
+/// Flags that take a revision/revset argument
+const REV_FLAGS: &[&str] = &[
+    "-r", "--revision", "--from", "--to", "--onto", "--into",
+    "--source", "--insert-after", "--insert-before", "--changes-in",
+];
+
+/// Commands that take a positional revision argument
+const POSITIONAL_REV_CMDS: &[&str] = &[
+    "abandon", "edit", "show", "describe", "new", "duplicate",
+    "metaedit", "parallelize", "sign", "unsign",
+];
+
+/// Extract all revision expressions from the input tokens.
+pub fn extract_revsets(tokens: &[&str]) -> Vec<String> {
+    let mut revs = Vec::new();
+    let mut iter = tokens.iter().peekable();
+
+    // Skip to find the command
+    let cmd = iter.next();
+
+    // Check for positional rev arg
+    let is_positional = cmd.map_or(false, |c| POSITIONAL_REV_CMDS.contains(c));
+
+    while let Some(token) = iter.next() {
+        if REV_FLAGS.contains(token) {
+            // Next token is the revset value
+            if let Some(val) = iter.next() {
+                if !val.is_empty() && !val.starts_with('-') {
+                    revs.push(val.to_string());
+                }
+            }
+        } else if let Some(rest) = token.strip_prefix("-r") {
+            // Handle -rVALUE (no space)
+            if !rest.is_empty() {
+                revs.push(rest.to_string());
+            }
+        } else if is_positional && !token.starts_with('-') && !token.is_empty() {
+            revs.push(token.to_string());
+        }
+    }
+    revs
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -272,5 +315,35 @@ mod tests {
         assert!(expects_bookmark_arg(&["bookmark", "move", "main"]));
         assert!(!expects_bookmark_arg(&["bookmark", "list"]));
         assert!(!expects_bookmark_arg(&["log"]));
+    }
+
+    #[test]
+    fn extract_rev_from_flag() {
+        let r = extract_revsets(&["log", "-r", "@-"]);
+        assert_eq!(r, vec!["@-"]);
+    }
+
+    #[test]
+    fn extract_rev_from_long_flag() {
+        let r = extract_revsets(&["rebase", "--from", "abc", "--to", "main"]);
+        assert_eq!(r, vec!["abc", "main"]);
+    }
+
+    #[test]
+    fn extract_rev_positional() {
+        let r = extract_revsets(&["show", "xyz123"]);
+        assert_eq!(r, vec!["xyz123"]);
+    }
+
+    #[test]
+    fn extract_rev_compact_flag() {
+        let r = extract_revsets(&["log", "-r@-"]);
+        assert_eq!(r, vec!["@-"]);
+    }
+
+    #[test]
+    fn extract_rev_empty_input() {
+        let r = extract_revsets(&["log"]);
+        assert!(r.is_empty());
     }
 }

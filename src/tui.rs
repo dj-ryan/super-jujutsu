@@ -10,9 +10,11 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::{Terminal, TerminalOptions, Viewport};
 use std::io::stdout;
+use std::time::{Duration, Instant};
 
 const VIEWPORT_HEIGHT: u16 = 22;
 const MAX_SUGGESTIONS: usize = 5;
+const DEBOUNCE_MS: u64 = 250;
 
 struct App {
     input: String,
@@ -21,6 +23,10 @@ struct App {
     selected_suggestion: usize,
     tree: CommandTree,
     bookmark_cache: Option<Vec<String>>,
+    // Highlight state
+    highlighted_ids: Vec<String>,
+    last_revset: Vec<String>,
+    revset_changed_at: Option<Instant>,
 }
 
 impl App {
@@ -32,6 +38,9 @@ impl App {
             selected_suggestion: 0,
             tree: commands::build_tree(),
             bookmark_cache: None,
+            highlighted_ids: vec![],
+            last_revset: vec![],
+            revset_changed_at: None,
         }
     }
 
@@ -54,6 +63,29 @@ impl App {
         completions.sort();
         self.suggestions = completions;
         self.selected_suggestion = 0;
+
+        // Check if revset args changed
+        let full_tokens: Vec<String> = self.input.split_whitespace().map(String::from).collect();
+        let full_refs: Vec<&str> = full_tokens.iter().map(|s| s.as_str()).collect();
+        let new_revsets = commands::extract_revsets(&full_refs);
+        if new_revsets != self.last_revset {
+            self.last_revset = new_revsets;
+            self.revset_changed_at = Some(Instant::now());
+        }
+    }
+
+    fn try_resolve_revsets(&mut self) {
+        if let Some(changed_at) = self.revset_changed_at {
+            if changed_at.elapsed() >= Duration::from_millis(DEBOUNCE_MS) {
+                self.revset_changed_at = None;
+                if self.last_revset.is_empty() {
+                    self.highlighted_ids.clear();
+                } else {
+                    let combined = self.last_revset.join(" | ");
+                    self.highlighted_ids = jj::resolve_revset(&combined);
+                }
+            }
+        }
     }
 
     fn tokenize(&self) -> Vec<String> {
@@ -126,7 +158,6 @@ impl App {
 }
 
 pub fn run(log_output: &str, status_output: &str) -> Result<Option<String>> {
-    // Install panic hook that restores terminal before printing panic
     let default_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         let _ = disable_raw_mode();
@@ -161,7 +192,21 @@ fn event_loop(
     status_output: &str,
 ) -> Result<Option<String>> {
     loop {
+        // Check if debounced revset resolution is due
+        app.try_resolve_revsets();
+
         terminal.draw(|frame| render(frame, app, log_output, status_output))?;
+
+        // Poll with timeout so we can check debounce even without input
+        let timeout = if app.revset_changed_at.is_some() {
+            Duration::from_millis(50)
+        } else {
+            Duration::from_millis(500)
+        };
+
+        if !event::poll(timeout)? {
+            continue;
+        }
 
         match event::read()? {
             Event::Key(key) => match (key.code, key.modifiers) {
@@ -212,23 +257,63 @@ fn render(frame: &mut ratatui::Frame, app: &App, log_output: &str, status_output
     ])
     .split(area);
 
-    // Side-by-side log and status
     let cols = Layout::horizontal([
         Constraint::Percentage(60),
         Constraint::Percentage(40),
     ])
     .split(rows[0]);
 
-    render_log(frame, cols[0], log_output);
+    render_log(frame, cols[0], log_output, &app.highlighted_ids);
     render_status(frame, cols[1], status_output);
     render_suggestions(frame, rows[1], app);
     render_input(frame, rows[2], app);
 }
 
+fn line_contains_id(line: &str, ids: &[String]) -> bool {
+    if ids.is_empty() {
+        return false;
+    }
+    // Strip ANSI codes for matching
+    let plain: String = {
+        let mut out = String::with_capacity(line.len());
+        let mut in_esc = false;
+        for c in line.chars() {
+            if in_esc {
+                if c.is_ascii_alphabetic() { in_esc = false; }
+            } else if c == '\x1b' {
+                in_esc = true;
+            } else {
+                out.push(c);
+            }
+        }
+        out
+    };
+    ids.iter().any(|id| plain.contains(id))
+}
 
+const HIGHLIGHT_BG: Color = Color::Indexed(236); // subtle dark gray bg
 
-fn render_log(frame: &mut ratatui::Frame, area: Rect, output: &str) {
-    let lines = ansi::parse_ansi_text(output);
+fn render_log(frame: &mut ratatui::Frame, area: Rect, output: &str, highlighted_ids: &[String]) {
+    let lines: Vec<Line> = output
+        .lines()
+        .map(|raw| {
+            let mut line = ansi::parse_ansi_line(raw);
+            if line_contains_id(raw, highlighted_ids) {
+                // Apply highlight background + bold marker to all spans
+                line.spans = std::iter::once(Span::styled(
+                    "▌",
+                    Style::default().fg(Color::Yellow),
+                ))
+                .chain(line.spans.into_iter().map(|mut s| {
+                    s.style = s.style.bg(HIGHLIGHT_BG);
+                    s
+                }))
+                .collect();
+            }
+            line
+        })
+        .collect();
+
     let block = Block::default()
         .title(" Log ")
         .borders(Borders::ALL)

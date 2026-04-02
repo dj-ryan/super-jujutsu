@@ -6,7 +6,7 @@ pub fn parse_ansi_text(input: &str) -> Vec<Line<'static>> {
     input.lines().map(parse_ansi_line).collect()
 }
 
-fn parse_ansi_line(line: &str) -> Line<'static> {
+pub fn parse_ansi_line(line: &str) -> Line<'static> {
     let mut spans: Vec<Span<'static>> = Vec::new();
     let mut style = Style::default();
     let mut buf = String::new();
