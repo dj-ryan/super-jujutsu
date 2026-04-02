@@ -1,3 +1,4 @@
+use crate::ansi;
 use crate::commands::{self, CommandTree};
 use crate::jj;
 use color_eyre::Result;
@@ -227,7 +228,7 @@ fn render(frame: &mut ratatui::Frame, app: &App, log_output: &str, status_output
 
 
 fn render_log(frame: &mut ratatui::Frame, area: Rect, output: &str) {
-    let lines: Vec<Line> = output.lines().map(|l| Line::raw(l)).collect();
+    let lines = ansi::parse_ansi_text(output);
     let block = Block::default()
         .title(" Log ")
         .borders(Borders::ALL)
@@ -236,13 +237,13 @@ fn render_log(frame: &mut ratatui::Frame, area: Rect, output: &str) {
 }
 
 fn render_status(frame: &mut ratatui::Frame, area: Rect, output: &str) {
-    let lines: Vec<Line> = if output.trim().is_empty() {
+    let lines = if output.trim().is_empty() {
         vec![Line::styled(
             "  (no changes)",
             Style::default().fg(Color::DarkGray),
         )]
     } else {
-        output.lines().map(|l| Line::raw(l)).collect()
+        ansi::parse_ansi_text(output)
     };
     let block = Block::default()
         .title(" Status ")
