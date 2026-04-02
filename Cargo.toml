@@ -1,0 +1,11 @@
+[package]
+name = "supjj"
+version = "0.1.0"
+edition = "2021"
+description = "Inline TUI flash card for Jujutsu VCS"
+
+[dependencies]
+ratatui = { version = "0.29", features = ["crossterm"] }
+crossterm = "0.28"
+color-eyre = "0.6"
+clap = { version = "4", features = ["derive"] }
