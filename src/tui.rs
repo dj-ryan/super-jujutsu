@@ -204,18 +204,24 @@ fn render(frame: &mut ratatui::Frame, app: &App, log_output: &str, status_output
     let area = frame.area();
 
     let suggestion_count = app.suggestions.len().min(MAX_SUGGESTIONS) as u16;
-    let chunks = Layout::vertical([
+    let rows = Layout::vertical([
         Constraint::Min(5),
-        Constraint::Length(6),
         Constraint::Length(suggestion_count.max(1)),
         Constraint::Length(1),
     ])
     .split(area);
 
-    render_log(frame, chunks[0], log_output);
-    render_status(frame, chunks[1], status_output);
-    render_suggestions(frame, chunks[2], app);
-    render_input(frame, chunks[3], app);
+    // Side-by-side log and status
+    let cols = Layout::horizontal([
+        Constraint::Percentage(60),
+        Constraint::Percentage(40),
+    ])
+    .split(rows[0]);
+
+    render_log(frame, cols[0], log_output);
+    render_status(frame, cols[1], status_output);
+    render_suggestions(frame, rows[1], app);
+    render_input(frame, rows[2], app);
 }
 
 fn strip_ansi(s: &str) -> String {
@@ -242,7 +248,7 @@ fn render_log(frame: &mut ratatui::Frame, area: Rect, output: &str) {
         .collect();
     let block = Block::default()
         .title(" Log ")
-        .borders(Borders::TOP | Borders::LEFT | Borders::RIGHT)
+        .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::DarkGray));
     frame.render_widget(Paragraph::new(lines).block(block).wrap(Wrap { trim: false }), area);
 }
@@ -261,7 +267,7 @@ fn render_status(frame: &mut ratatui::Frame, area: Rect, output: &str) {
     };
     let block = Block::default()
         .title(" Status ")
-        .borders(Borders::ALL)
+        .borders(Borders::TOP | Borders::RIGHT | Borders::BOTTOM)
         .border_style(Style::default().fg(Color::DarkGray));
     frame.render_widget(Paragraph::new(lines).block(block).wrap(Wrap { trim: false }), area);
 }
