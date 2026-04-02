@@ -6,7 +6,7 @@ use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
+use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::{Terminal, TerminalOptions, Viewport};
 use std::io::stdout;
 
@@ -224,33 +224,15 @@ fn render(frame: &mut ratatui::Frame, app: &App, log_output: &str, status_output
     render_input(frame, rows[2], app);
 }
 
-fn strip_ansi(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut in_escape = false;
-    for c in s.chars() {
-        if in_escape {
-            if c.is_ascii_alphabetic() {
-                in_escape = false;
-            }
-        } else if c == '\x1b' {
-            in_escape = true;
-        } else {
-            out.push(c);
-        }
-    }
-    out
-}
+
 
 fn render_log(frame: &mut ratatui::Frame, area: Rect, output: &str) {
-    let lines: Vec<Line> = output
-        .lines()
-        .map(|l| Line::raw(strip_ansi(l)))
-        .collect();
+    let lines: Vec<Line> = output.lines().map(|l| Line::raw(l)).collect();
     let block = Block::default()
         .title(" Log ")
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(Paragraph::new(lines).block(block).wrap(Wrap { trim: false }), area);
+    frame.render_widget(Paragraph::new(lines).block(block), area);
 }
 
 fn render_status(frame: &mut ratatui::Frame, area: Rect, output: &str) {
@@ -260,16 +242,13 @@ fn render_status(frame: &mut ratatui::Frame, area: Rect, output: &str) {
             Style::default().fg(Color::DarkGray),
         )]
     } else {
-        output
-            .lines()
-            .map(|l| Line::raw(strip_ansi(l)))
-            .collect()
+        output.lines().map(|l| Line::raw(l)).collect()
     };
     let block = Block::default()
         .title(" Status ")
         .borders(Borders::TOP | Borders::RIGHT | Borders::BOTTOM)
         .border_style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(Paragraph::new(lines).block(block).wrap(Wrap { trim: false }), area);
+    frame.render_widget(Paragraph::new(lines).block(block), area);
 }
 
 fn render_suggestions(frame: &mut ratatui::Frame, area: Rect, app: &App) {

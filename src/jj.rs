@@ -12,7 +12,7 @@ pub fn in_repo() -> bool {
 
 pub fn log() -> String {
     Command::new("jj")
-        .args(["log", "--limit", "10", "--no-graph", "--color=always"])
+        .args(["log", "--limit", "10", "--color=never"])
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
         .unwrap_or_default()
@@ -20,7 +20,7 @@ pub fn log() -> String {
 
 pub fn status() -> String {
     Command::new("jj")
-        .args(["status", "--color=always"])
+        .args(["status", "--color=never"])
         .output()
         .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
         .unwrap_or_default()
